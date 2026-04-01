@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Meeting Pro v4.2</title>
+<style>
+:root{ --bg:#f1f5f9; --card:#ffffff; --text:#1e293b; --primary:#2563eb; --danger:#ef4444; --success:#10b981; --border:#e2e8f0; }
+.dark{ --bg:#0f172a; --card:#1e293b; --text:#f1f5f9; --border:#334155; }
+*{box-sizing:border-box; font-family: sans-serif; margin:0; padding:0;}
+body{background:var(--bg); color:var(--text); padding:10px; transition:.3s; min-height:100vh;}
+.container{max-width:450px; margin:auto;}
+
+/* Header */
+.header{display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;}
+.title{color:var(--primary); font-weight:900; font-size:22px;}
+.mode-btn{background:var(--card); border:1px solid var(--primary); color:var(--primary); padding:5px 10px; border-radius:8px; cursor:pointer;}
+
+.timebox{background:var(--primary); color:#fff; padding:12px; border-radius:15px; text-align:center; font-weight:700; margin-bottom:12px; box-shadow:0 4px 10px rgba(37,99,235,0.2);}
+
+/* Info Bar (Clickable) */
+.info-bar{display:flex; gap:8px; margin-bottom:12px;}
+.info-box{flex:1; background:var(--card); padding:12px; border-radius:15px; border-bottom:4px solid var(--primary); text-align:center; cursor:pointer; transition: 0.2s;}
+.info-box:active{transform: scale(0.95); opacity: 0.8;}
+.info-label{font-size:11px; color:#64748b; font-weight:bold; text-transform:uppercase;}
+.info-val{font-size:14px; font-weight:800; display:block; margin-top:3px;}
+
+/* Inputs */
+.input{width:100%; padding:13px; border-radius:12px; border:1px solid var(--border); margin-bottom:10px; background:var(--card); color:var(--text); font-size:15px; outline:none;}
+.card-entry{background:var(--card); padding:12px; border-radius:15px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; box-shadow:0 2px 5px rgba(0,0,0,0.05);}
+
+/* Actions */
+.btn{width:100%; padding:14px; border:none; border-radius:12px; font-weight:bold; cursor:pointer; font-size:15px;}
+.btn-primary{background:var(--primary); color:#fff;}
+.btn-success{background:var(--success); color:#fff;}
+.btn-danger{background:var(--danger); color:#fff;}
+
+/* Modal (Popup) */
+.modal{display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); z-index:1000; align-items:center; justify-content:center;}
+.modal-content{background:var(--card); padding:25px; border-radius:20px; width:85%; max-width:320px; text-align:center;}
+
+.attended span{text-decoration:line-through; opacity:0.5;}
+.footer-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:20px; padding-bottom:20px;}
+</style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header">
+        <div class="title" id="txt-title">MEETING PRO</div>
+        <div>
+            <button id="themeBtn" class="mode-btn">🌙</button>
+            <button id="langBtn" class="mode-btn" style="margin-left:5px">MM</button>
+        </div>
+    </div>
+
+    <div id="timebox" class="timebox"></div>
+
+    <div class="info-bar">
+        <div class="info-box" onclick="openSetting('leader')">
+            <span class="info-label" id="lbl-leader">Leader</span>
+            <span class="info-val" id="val-leader">---</span>
+        </div>
+        <div class="info-box" onclick="openSetting('owner')">
+            <span class="info-label" id="lbl-owner">Owner</span>
+            <span class="info-val" id="val-owner">---</span>
+        </div>
+    </div>
+
+    <input id="topic" class="input" placeholder="Meeting Topic...">
+    
+    <div style="background:var(--card); padding:15px; border-radius:18px; margin-bottom:15px; border:2px dashed var(--primary);">
+        <input id="nameIn" class="input" placeholder="Enter name...">
+        <button onclick="addPerson()" class="btn btn-primary" id="btn-add">+ Add Person</button>
+    </div>
+
+    <div id="list"></div>
+
+    <div class="footer-grid">
+        <button class="btn btn-success" id="btn-export" onclick="exportData()">Export</button>
+        <button class="btn btn-danger" id="btn-clear" onclick="clearAll()">Clear All</button>
+    </div>
+</div>
+
+<div id="settingModal" class="modal">
+    <div class="modal-content">
+        <h3 id="modal-title" style="margin-bottom:15px; color:var(--primary);">Update Info</h3>
+        <input id="editName" class="input" placeholder="Name/Position">
+        <input id="editPhone" class="input" placeholder="Phone Number">
+        <div style="display:flex; gap:10px">
+            <button class="btn btn-primary" onclick="saveSetting()">Save</button>
+            <button class="btn" style="background:#ccc; color:#000" onclick="closeModal()">Close</button>
+        </div>
+    </div>
+</div>
+
+<script>
+let data = JSON.parse(localStorage.getItem('m_v42_data')) || [];
+let settings = JSON.parse(localStorage.getItem('m_v42_set')) || {
+    leader: {n:'Leader', p:'09...'},
+    owner: {n:'Owner', p:'09...'}
+};
+let lang = localStorage.getItem('m_v42_lang') || 'en';
+let currentEdit = '';
+
+// ==== Clock ====
+function clock() {
+    const opt = { weekday:'short', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' };
+    document.getElementById('timebox').innerText = new Date().toLocaleString(lang==='en'?'en-US':'my-MM', opt);
+}
+setInterval(clock, 1000); clock();
+
+// ==== Settings (Leader/Owner) ====
+function openSetting(type) {
+    currentEdit = type;
+    document.getElementById('modal-title').innerText = type.toUpperCase() + " INFO";
+    document.getElementById('editName').value = settings[type].n;
+    document.getElementById('editPhone').value = settings[type].p;
+    document.getElementById('settingModal').style.display = 'flex';
+}
+
+function closeModal() { document.getElementById('settingModal').style.display = 'none'; }
+
+function saveSetting() {
+    settings[currentEdit].n = document.getElementById('editName').value;
+    settings[currentEdit].p = document.getElementById('editPhone').value;
+    localStorage.setItem('m_v42_set', JSON.stringify(settings));
+    closeModal();
+    render();
+}
+
+// ==== Core Functions ====
+function render() {
+    // Update Leader/Owner display
+    document.getElementById('val-leader').innerText = settings.leader.n;
+    document.getElementById('val-owner').innerText = settings.owner.n;
+    
+    const list = document.getElementById('list');
+    list.innerHTML = '';
+    data.forEach((p, i) => {
+        const div = document.createElement('div');
+        div.className = `card-entry ${p.c ? 'attended' : ''}`;
+        div.innerHTML = `
+            <span>${p.n}</span>
+            <div style="display:flex; align-items:center;">
+                <button onclick="del(${i})" style="color:var(--danger); background:none; border:none; margin-right:15px; font-weight:bold; font-size:18px">✕</button>
+                <input type="checkbox" ${p.c?'checked':''} onchange="tog(${i})" style="width:24px; height:24px; accent-color:var(--success)">
+            </div>
+        `;
+        list.appendChild(div);
+    });
+    localStorage.setItem('m_v42_data', JSON.stringify(data));
+    updateUI();
+}
+
+function addPerson() {
+    const n = document.getElementById('nameIn').value.trim();
+    if(!n) return;
+    data.push({n:n, c:false});
+    document.getElementById('nameIn').value = '';
+    render();
+}
+
+function tog(i) { data[i].c = !data[i].c; render(); }
+function del(i) { if(confirm('Delete?')) { data.splice(i,1); render(); } }
+function clearAll() { if(confirm('Clear all data?')) { data=[]; render(); } }
+
+// ==== Export ====
+function exportData() {
+    let txt = `MEETING REPORT\nTopic: ${document.getElementById('topic').value}\n`;
+    txt += `Leader: ${settings.leader.n} (${settings.leader.p})\n`;
+    txt += `Owner: ${settings.owner.n} (${settings.owner.p})\n\n`;
+    data.forEach((p,i) => txt += `${i+1}. ${p.c?'[✔]':'[ ]'} ${p.n}\n`);
+    const blob = new Blob([txt], {type:'text/plain'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'Meeting_Report.txt'; a.click();
+}
+
+// ==== UI & Language ====
+const themeBtn = document.getElementById('themeBtn');
+themeBtn.onclick = () => {
+    document.body.classList.toggle('dark');
+    themeBtn.innerText = document.body.classList.contains('dark') ? '☀️' : '🌙';
+};
+
+const langBtn = document.getElementById('langBtn');
+langBtn.onclick = () => {
+    lang = (lang === 'en') ? 'mm' : 'en';
+    localStorage.setItem('m_v42_lang', lang);
+    render();
+};
+
+function updateUI() {
+    const isMm = (lang === 'mm');
+    document.getElementById('txt-title').innerText = isMm ? "စီမံသူ PRO" : "MEETING PRO";
+    document.getElementById('lbl-leader').innerText = isMm ? "ခေါင်းဆောင်" : "Leader";
+    document.getElementById('lbl-owner').innerText = isMm ? "ပိုင်ရှင်" : "Owner";
+    document.getElementById('topic').placeholder = isMm ? "အစည်းအဝေး ခေါင်းစဉ်..." : "Meeting Topic...";
+    document.getElementById('nameIn').placeholder = isMm ? "အမည်ရိုက်ထည့်ပါ..." : "Enter name...";
+    document.getElementById('btn-add').innerText = isMm ? "+ ထည့်သွင်းမည်" : "+ Add Person";
+    document.getElementById('btn-export').innerText = isMm ? "မှတ်တမ်းထုတ်ယူမည်" : "Export";
+    document.getElementById('btn-clear').innerText = isMm ? "အကုန်ဖျက်မည်" : "Clear All";
+    langBtn.innerText = isMm ? "EN" : "MM";
+}
+
+render();
+</script>
+</body>
+</html>
